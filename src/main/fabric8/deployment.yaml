@@ -1,0 +1,21 @@
+spec:
+  template:
+    spec:
+      containers:
+        - env:
+          - name: GREETING_PREFIX
+            valueFrom:
+             configMapKeyRef:
+                name: spring-boot-configmaps-demo
+                key: greeter.prefix
+          volumeMounts:
+          - name: application-config 
+            mountPath: "/deployments/config" 
+            readOnly: true
+      volumes:
+      - name: application-config
+        configMap:
+          name: spring-app-config 
+          items:
+          - key: application.properties 
+            path: application.properties 

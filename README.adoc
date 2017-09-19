@@ -1,0 +1,322 @@
+= Configuring Spring Boot Application on Kubernetes
+
+A demo Spring Boot application that demonstrates on using
+Kubernetes https://kubernetes.io/docs/tasks/configure-pod-container/configmap/[ConfigMaps] to configure Spring Boot application.
+
+== Setup
+
+* You might need an access to Kubernetes Cluster to play with this application. The easiest way to get local Kuberentes cluster
+up and running is using https://github.com/kubernetes/minikube[minikube]
+
+* Install https://docs.spring.io/spring-boot/docs/current/reference/html/getting-started-installing-spring-boot.html#getting-started-installing-the-cli[Spring Boot CLI]
+
+* Untar/Unzip Spring Boot CLI 1.5.7.RELEASE and add it your path
+
+NOTE: The rest of the document assumes you have https://github.com/kubernetes/minikube[minikube] up and running
+
+== Build and Deploy
+
+=== Create project
+
+For the demo purpose we will be creating a simple Spring Boot project,
+
+[source,sh]
+----
+spring init --artifactId=spring-boot-configmaps-demo \
+   --name="Kubernetes:: Spring Boot:: Demos :: ConfigMaps Demo"  \
+   --groupId="com.redhat.developers" \
+   --package-name="com.redhat.developers" \
+   --dependencies=web,actuator,lombok \
+   --extract spring-boot-configmaps-demo <1>
+
+cd spring-boot-configmaps-demo
+
+./mvnw io.fabric8:fabric8-maven-plugin:3.5.30:setup <2>
+----
+<1> Creates a Spring Boot project with web and actuator dependencies
+<2> Adds the https://maven.fabric8.io[fabric8-maven-plugin] to the project that will help with deploying the application on Kubernetes
+
+The complete demo sources is available https://github.com/redhat-developer-demos/spring-boot-configmaps-demo[here]
+
+The directory **spring-boot-configmaps-demo** will be referred to as **$PROJECT_HOME** throughout this document.
+
+==== Add a simple Greeting REST API
+
+[source,java]
+----
+package com.redhat.developers;
+
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RestController;
+
+@RestController
+@Slf4j
+public class GreeterController {
+
+
+    @GetMapping("/greet/{user}")
+    public String greet(@PathVariable("user") String user) {
+        String prefix = System.getenv().getOrDefault("GREETING_PREFIX", "Hi"); <1>
+        log.info("Prefix :{} and User:{}", prefix, user);
+        if (prefix == null) {
+            prefix = "Hello!";
+        }
+
+        return String.format("%s %s! Welcome to Configuring Spring Boot on Kubernetes!", prefix, user);
+    }
+}
+
+----
+<1> The application looks for the prefix from an environment variable called **GREETER_PREFIX**
+
+[[configmap-as-env-vars]]
+=== ConfigMap Properties as Environment Variables
+
+Lets create a Kubernetes https://kubernetes.io/docs/tasks/configure-pod-container/configmap/[ConfigMaps] to hold the proeprty called `greeter.prefix`,
+which will then be injected to Kubernetes deployment via an environment variable called **GREETER_PREFIX**
+
+[[create-configmap]]
+==== Create ConfigMap
+
+[source,sh]
+----
+kubectl create configmap spring-boot-configmaps-demo --from-literal=greeter.prefix="Hello" <1>
+
+kubectl get configmap spring-boot-configmaps-demo -oyaml <2>
+----
+<1> Creates a configmap called `spring-boot-configmaps-demo` which will have property called `greeter.prefix` with a value "Hello"
+<2> Displays the ConfigMap called `spring-boot-configmaps-demo` as yaml
+
+**Example output of `kubectl get configmap spring-boot-configmaps-demo -oyaml`**
+
+[source,yaml]
+----
+apiVersion: v1
+data:
+  greeter.prefix: Hello
+kind: ConfigMap
+metadata:
+  creationTimestamp: 2017-09-19T04:03:37Z
+  name: spring-boot-configmaps-demo
+  namespace: default
+  resourceVersion: "50671"
+  selfLink: /api/v1/namespaces/default/configmaps/spring-boot-configmaps-demo
+  uid: 8397deb7-9cef-11e7-9b8d-080027da6995
+----
+
+==== Kubernetes Mainifests
+
+As the application is configured to use https://maven.fabric8.io[fabric8-maven-plugin], we can create Kubernetes deployment
+and service as fragments in `$PROJECT_HOME/src/main/fabric8`.  The https://maven.fabric8.io[fabric8-maven-plugin] takes
+care of building the complete Kubernetes mainfests by merging the contents of the fragment(s) from `$PROJECT_HOME/src/main/fabric8`
+during deploy.
+
+===== Deployment
+Create a file called *deployment.yaml* in `$PROJECT_HOME/src/main/fabric8` with the following contents,
+
+[source,yaml]
+----
+spec:
+  template:
+    spec:
+      containers:
+        - env:
+          - name: GREETING_PREFIX <1>
+            valueFrom:
+             configMapKeyRef: <2>
+                name: spring-boot-configmaps-demo <3>
+                key: greeter.prefix <4>
+
+----
+
+<1> Define Environment variable called **GREETING_PREFIX**
+<2> Defines that the value will be a ConfigMap reference
+<3> Name of the ConfigMap from where to look for the key/value pair, this should be same name you have used in <<create-configmap>>
+<4> The property key inside the ConfigMap, whose value needs to be assigned to environment variable **GREETING_PREFIX**
+
+===== Service
+
+To enable easy access of the application, we make the type of Kubernetes service as https://kubernetes.io/docs/concepts/services-networking/service/#type-nodeport[NodePort],
+create a file called **svc.yaml** in `$PROJECT_HOME/src/main/fabric8` with the following contents,
+
+[source,yaml]
+----
+apiVersion: v1
+kind: Service
+spec:
+  type: NodePort <1>
+----
+<1> expose the service using https://kubernetes.io/docs/concepts/services-networking/service/#type-nodeport[NodePort]
+
+[[deploy-app]]
+==== Deploy
+
+To deploy the application execute the command `./mvnw clean fabric8:deploy`.  The application deployment status can be
+checked using the command `kubectl get pods -w`
+
+[[access-app]]
+==== Access the Application
+
+To access and test the application execute the following command,
+
+[source,sh]
+----
+curl $(minikube service spring-boot-configmaps-demo --url)/greet/jerry; echo "";
+----
+
+The above command should display a message like **Hello jerry! Welcome to Configuring Spring Boot on Kubernetes!**
+
+NOTE: `minikube service spring-boot-configmaps-demo --url` is used to get the service url and port via which we can access
+the application
+
+=== As File Mounts
+
+In <<configmap-as-env-vars>> we saw how Kubernetes https://kubernetes.io/docs/tasks/configure-pod-container/configmap/[ConfigMaps] can
+be injected to the Kubernetes deployment as environment variables.  In this section we will see how we can mount
+Spring Boot `application.yaml` using https://kubernetes.io/docs/tasks/configure-pod-container/configmap/[ConfigMaps].
+
+
+[[app-properties]]
+==== Add property to application.properties
+
+Add a property called `greeter.message` to the $PROJECT_HOME/src/main/resources/application.properties.  The modified file
+will be as shown below,
+
+[source]
+----
+greeter.message=%s %s! Spring Boot application.properties has been mounted as volume on Kubernetes!
+----
+
+[[create-configmap-file]]
+==== Create ConfigMap
+
+[code,sh]
+----
+cd $PROJECT_HOME
+kubectl create configmap spring-app-config --from-file=src/main/resources/application.properties <1>
+----
+
+<1> This is similar to creating <<create-configmap,ConfigMap>> but instead of literal we will now put the entire file
+`application.properties` in a configmap called spring-app-config
+
+To see the contents of the ConfigMap, execute the command `kubectl get configmap spring-app-config -oyaml`, a sample output
+is shown below,
+
+[source,yaml]
+----
+apiVersion: v1
+data:
+  application.properties: greeter.message=%s %s! Spring Boot application.properties has been mounted as volume on Kubernetes!
+    on Kubernetes!
+kind: ConfigMap
+metadata:
+  creationTimestamp: 2017-09-19T04:45:27Z
+  name: spring-app-config
+  namespace: default
+  resourceVersion: "53471"
+  selfLink: /api/v1/namespaces/default/configmaps/spring-app-config
+  uid: 5bac774a-9cf5-11e7-9b8d-080027da6995
+----
+
+==== Update GreeterController to use `greeter.message`
+
+Modify the `GreeterController` to use the `greeter.message`, the modified file looks as shown below
+
+[source,java]
+----
+package com.redhat.developers;
+
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RestController;
+
+@RestController
+@Slf4j
+public class GreeterController {
+
+
+    @Value("${greeter.message}")
+    private String greeterMessageFormat; <1>
+
+    @GetMapping("/greet/{user}")
+    public String greet(@PathVariable("user") String user) {
+        String prefix = System.getenv().getOrDefault("GREETING_PREFIX", "Hi");
+        log.info("Prefix :{} and User:{}", prefix, user);
+        if (prefix == null) {
+            prefix = "Hello!";
+        }
+
+        return String.format(greeterMessageFormat, prefix, user);
+    }
+}
+----
+<1> Injects the property `greeter.message` which has been defined in `application.properties`
+
+===== Mounting `application.properties` inside Deployment
+
+Kubernetes https://kubernetes.io/docs/tasks/configure-pod-container/configmap/[ConfigMaps] can be mounted as volumes inside
+the deployments.
+
+Update the **$PROJECT_HOME/src/main/fabric8/deployment.yaml** with the following contents,
+
+[source,yaml]
+----
+spec:
+  template:
+    spec:
+      containers:
+        - env:
+          - name: GREETING_PREFIX
+            valueFrom:
+             configMapKeyRef:
+                name: spring-boot-configmaps-demo
+                key: greeter.prefix
+          volumeMounts:
+          - name: application-config <1>
+            mountPath: "/deployments/config" <2>
+            readOnly: true
+      volumes:
+      - name: application-config
+        configMap:
+          name: spring-app-config <3>
+          items:
+          - key: application.properties <4>
+            path: application.properties <5>
+----
+
+<1> Define a Volume mount and give it a logical name
+<2> Define mountPath, location inside container where the file will be mounted
+<3> The ConfigMap to be used, this name should be same as defined in <<create-configmap-file,ConfigMap from file>>
+<4> The property key from ConfigMap to be used as a content of file
+<5> The subpath within location defined in #2, in this case it will be `/deployments/config/application.properties`
+
+==== Deploy and Access the application
+
+<<deploy-app>> and <<access-app>> application to see the application properties loaded and used from ConfigMaps via
+container volumes.
+
+When you access the application you will notice the response to be
+** Hello jerry! Spring Boot application.properties has been mounted as volume on Kubernetes!**
+
+[TIP]
+====
+
+To check if the volume has been mounted execute the command,
+
+[source,sh]
+----
+kubectl exec spring-boot-configmaps-demo-3812387281-f566v -- cat /deployments/config/application.properties <1>
+----
+<1> Replace the pod id `spring-boot-configmaps-demo-3812387281-f566v` with pod from  your local setup, the pod id is retrieved
+using the command `kubectl get pod`
+====
+
+===  Cleanup
+
+To clean the deployments from $PROJECT_HOME execute `./mvnw fabric8:undeploy`
+
+--END--
