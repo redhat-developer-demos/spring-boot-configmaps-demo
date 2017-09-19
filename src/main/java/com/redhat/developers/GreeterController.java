@@ -10,7 +10,6 @@ import org.springframework.web.bind.annotation.RestController;
 @Slf4j
 public class GreeterController {
 
-
     @Value("${greeter.message}")
     private String greeterMessageFormat; 
 
