@@ -74,7 +74,7 @@ public class GreeterController {
 [[configmap-as-env-vars]]
 === ConfigMap Properties as Environment Variables
 
-Lets create a Kubernetes https://kubernetes.io/docs/tasks/configure-pod-container/configmap/[ConfigMaps] to hold the proeprty called `greeter.prefix`,
+Lets create a Kubernetes https://kubernetes.io/docs/tasks/configure-pod-container/configmap/[ConfigMaps] to hold the property called `greeter.prefix`,
 which will then be injected to Kubernetes deployment via an environment variable called **GREETER_PREFIX**
 
 [[create-configmap]]
@@ -106,11 +106,11 @@ metadata:
   uid: 8397deb7-9cef-11e7-9b8d-080027da6995
 ----
 
-==== Kubernetes Mainifests
+==== Kubernetes Manifests
 
 As the application is configured to use https://maven.fabric8.io[fabric8-maven-plugin], we can create Kubernetes deployment
 and service as fragments in `$PROJECT_HOME/src/main/fabric8`.  The https://maven.fabric8.io[fabric8-maven-plugin] takes
-care of building the complete Kubernetes mainfests by merging the contents of the fragment(s) from `$PROJECT_HOME/src/main/fabric8`
+care of building the complete Kubernetes manifests by merging the contents of the fragment(s) from `$PROJECT_HOME/src/main/fabric8`
 during deploy.
 
 ===== Deployment
@@ -182,7 +182,7 @@ Spring Boot `application.yaml` using https://kubernetes.io/docs/tasks/configure-
 ==== Add property to application.properties
 
 Add a property called `greeter.message` to the $PROJECT_HOME/src/main/resources/application.properties.  The modified file
-will be as shown below,
+is as shown below,
 
 [source]
 ----
@@ -292,15 +292,15 @@ spec:
 <2> Define mountPath, location inside container where the file will be mounted
 <3> The ConfigMap to be used, this name should be same as defined in <<create-configmap-file,ConfigMap from file>>
 <4> The property key from ConfigMap to be used as a content of file
-<5> The subpath within location defined in #2, in this case it will be `/deployments/config/application.properties`
+<5> The sub path within location defined, in this case it will be `/deployments/config/application.properties`
 
 ==== Deploy and Access the application
 
-<<deploy-app>> and <<access-app>> application to see the application properties loaded and used from ConfigMaps via
+<<deploy-app>> and <<access-app>> to see the `application.properties` loaded and used from ConfigMaps via
 container volumes.
 
 When you access the application you will notice the response to be
-** Hello jerry! Spring Boot application.properties has been mounted as volume on Kubernetes!**
+**Hello jerry! Spring Boot application.properties has been mounted as volume on Kubernetes!**
 
 [TIP]
 ====
@@ -311,8 +311,10 @@ To check if the volume has been mounted execute the command,
 ----
 kubectl exec spring-boot-configmaps-demo-3812387281-f566v -- cat /deployments/config/application.properties <1>
 ----
+
 <1> Replace the pod id `spring-boot-configmaps-demo-3812387281-f566v` with pod from  your local setup, the pod id is retrieved
 using the command `kubectl get pod`
+
 ====
 
 ===  Cleanup
