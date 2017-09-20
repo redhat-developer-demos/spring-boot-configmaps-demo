@@ -1,4 +1,4 @@
-= Configuring Spring Boot Application on Kubernetes
+= Configuring Spring Boot Application on Kubernetes with ConfigMaps
 
 A demo Spring Boot application that demonstrates on using
 Kubernetes https://kubernetes.io/docs/tasks/configure-pod-container/configmap/[ConfigMaps] to configure Spring Boot application.
@@ -192,7 +192,7 @@ greeter.message=%s %s! Spring Boot application.properties has been mounted as vo
 [[create-configmap-file]]
 ==== Create ConfigMap
 
-[code,sh]
+[source,sh]
 ----
 cd $PROJECT_HOME
 kubectl create configmap spring-app-config --from-file=src/main/resources/application.properties <1>
